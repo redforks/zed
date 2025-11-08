@@ -97,7 +97,6 @@ markdown.workspace = true
 markdown_preview.workspace = true
 menu.workspace = true
 migrator.workspace = true
-mimalloc = { version = "0.1", optional = true }
 nc.workspace = true
 nix = { workspace = true, features = ["pthread", "signal"] }
 node_runtime.workspace = true
@@ -166,6 +165,7 @@ zeta.workspace = true
 zeta2.workspace = true
 zlog.workspace = true
 zlog_settings.workspace = true
+tikv-jemallocator = { version = "0.6.1", features = ["background_threads"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true

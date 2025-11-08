@@ -1,8 +1,10 @@
 mod reliability;
 mod zed;
 
+use crate::zed::{OpenRequestKind, eager_load_active_theme_and_icon_theme};
 use agent_ui::AgentPanel;
 use anyhow::{Context as _, Error, Result};
+use assets::Assets;
 use clap::{Parser, command};
 use cli::FORCE_CLI_MODE_ENV_VAR_NAME;
 use client::{Client, ProxySettings, UserStore, parse_zed_link};
@@ -16,20 +18,17 @@ use fs::{Fs, RealFs};
 use futures::{StreamExt, channel::oneshot, future};
 use git::GitHostingProviderRegistry;
 use gpui::{App, AppContext, Application, AsyncApp, Focusable as _, UpdateGlobal as _};
-
 use gpui_tokio::Tokio;
 use language::LanguageRegistry;
-use onboarding::{FIRST_OPEN, show_onboarding_view};
-use prompt_store::PromptBuilder;
-use remote::RemoteConnectionOptions;
-use reqwest_client::ReqwestClient;
-
-use assets::Assets;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
+use onboarding::{FIRST_OPEN, show_onboarding_view};
 use parking_lot::Mutex;
 use project::project_settings::ProjectSettings;
+use prompt_store::PromptBuilder;
 use recent_projects::{SshSettings, open_remote_project};
 use release_channel::{AppCommitSha, AppVersion, ReleaseChannel};
+use remote::RemoteConnectionOptions;
+use reqwest_client::ReqwestClient;
 use session::{AppSession, Session};
 use settings::{BaseKeymap, Settings, SettingsStore, watch_config_file};
 use std::{
@@ -40,6 +39,7 @@ use std::{
     sync::Arc,
 };
 use theme::{ActiveTheme, GlobalTheme, ThemeRegistry};
+use tikv_jemallocator::Jemalloc;
 use util::{ResultExt, TryFutureExt, maybe};
 use uuid::Uuid;
 use workspace::{
@@ -53,11 +53,8 @@ use zed::{
     initialize_workspace, open_paths_with_positions,
 };
 
-use crate::zed::{OpenRequestKind, eager_load_active_theme_and_icon_theme};
-
-#[cfg(feature = "mimalloc")]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[cfg_attr(target_os = "linux", global_allocator)]
+static GLOBAL: Jemalloc = Jemalloc;
 
 fn files_not_created_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
     let message = "Zed failed to launch";
@@ -77,14 +74,18 @@ fn files_not_created_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
             #[cfg(unix)]
             {
                 if kind == io::ErrorKind::PermissionDenied {
-                    error_kind_details.push_str("\n\nConsider using chown and chmod tools for altering the directories permissions if your user has corresponding rights.\
-                        \nFor example, `sudo chown $(whoami):staff ~/.config` and `chmod +uwrx ~/.config`");
+                    error_kind_details.push_str(
+                        "\n\nConsider using chown and chmod tools for altering the directories \
+                         permissions if your user has corresponding rights.\nFor example, `sudo \
+                         chown $(whoami):staff ~/.config` and `chmod +uwrx ~/.config`",
+                    );
                 }
             }
 
             Some(error_kind_details)
         })
-        .collect::<Vec<_>>().join("\n\n");
+        .collect::<Vec<_>>()
+        .join("\n\n");
 
     eprintln!("{message}: {error_details}");
     Application::new().run(move |cx| {
@@ -120,7 +121,8 @@ fn fail_to_open_window_async(e: anyhow::Error, cx: &mut AsyncApp) {
 
 fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
     eprintln!(
-        "Zed failed to open a window: {e:?}. See https://zed.dev/docs/linux for troubleshooting steps."
+        "Zed failed to open a window: {e:?}. See https://zed.dev/docs/linux for troubleshooting \
+         steps."
     );
     #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
     {
@@ -508,7 +510,8 @@ pub fn main() {
             cx,
         );
 
-        // We should rename these in the future to `first app open`, `first app open for release channel`, and `app open`
+        // We should rename these in the future to `first app open`, `first app open for release
+        // channel`, and `app open`
         if let (Some(system_id), Some(installation_id)) = (&system_id, &installation_id) {
             match (&system_id, &installation_id) {
                 (IdType::New(_), IdType::New(_)) => {
@@ -1132,7 +1135,8 @@ async fn restore_or_create_workspace(app_state: Arc<AppState>, cx: &mut AsyncApp
             // we've already logged the errors above, so the user can check logs
             if !toast_shown {
                 log::error!(
-                    "Failed to show notification for window restoration errors, because no workspace windows were available."
+                    "Failed to show notification for window restoration errors, because no \
+                     workspace windows were available."
                 );
             }
         }
